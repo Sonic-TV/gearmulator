@@ -46,6 +46,17 @@ set(HARDWARE_ASSETS
 	${HARDWARE_SKIN_DIR}/value_knob.png
 )
 juce_add_binary_data(88emuplayer_BinaryData SOURCES ${HARDWARE_ASSETS})
+# same format gating as createJucePlugin() in cmake/juce.cmake
+set(emu88_formats Standalone)
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH)
+	list(APPEND emu88_formats VST)
+endif()
+if(USE_VST3)
+	list(APPEND emu88_formats VST3)
+endif()
+if(APPLE AND USE_AU)
+	list(APPEND emu88_formats AU)
+endif()
 juce_add_plugin(88emuplayer
 	# The 512px application icon supplies both ICNS and Windows ICO sizes.
 	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.png"
@@ -59,7 +70,7 @@ juce_add_plugin(88emuplayer
 	COPY_PLUGIN_AFTER_BUILD FALSE
 	PLUGIN_MANUFACTURER_CODE TusP
 	PLUGIN_CODE TscH
-	FORMATS Standalone
+	FORMATS ${emu88_formats}
 	PRODUCT_NAME "88emuPlayer"
 	PRODUCTS_FOLDER "${CMAKE_SOURCE_DIR}/bin/plugins/$<CONFIG>"
 	BUNDLE_ID "com.theusualsuspects.SC88Hardware"
@@ -103,6 +114,26 @@ endif()
 if(TARGET PluginFormat_Standalone)
 	add_dependencies(PluginFormat_Standalone 88emuplayer_Standalone)
 endif()
+# same plugin format setup as createJucePlugin() in cmake/juce.cmake
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH AND TARGET PluginFormat_VST2)
+	add_dependencies(PluginFormat_VST2 88emuplayer_VST)
+endif()
+if(USE_VST3 AND TARGET PluginFormat_VST3)
+	add_dependencies(PluginFormat_VST3 88emuplayer_VST3)
+endif()
+if(USE_CLAP)
+	clap_juce_extensions_plugin(TARGET 88emuplayer
+		CLAP_ID "com.theusualsuspects.TscH"
+		CLAP_FEATURES instrument synthesizer
+		CLAP_SUPPORT_URL "https://dsp56300.wordpress.com"
+		CLAP_MANUAL_URL "https://dsp56300.wordpress.com"
+		CLAP_USE_JUCE_PARAMETER_RANGES "DISCRETE"
+		)
+	set_property(TARGET 88emuplayer_CLAP PROPERTY FOLDER "Ronaldo/88emu")
+	if(TARGET PluginFormat_CLAP)
+		add_dependencies(PluginFormat_CLAP 88emuplayer_CLAP)
+	endif()
+endif()
 # The standalone player needs its own install rule and CPack component. No macOS setup script: the
 # README explains how to allow the quarantined app and CLI in System Settings.
 set(playerProductName "88emuPlayer")
@@ -115,6 +146,66 @@ else()
 endif()
 set_target_properties(88emuplayer PROPERTIES TUS_PRODUCT_NAME "${playerProductName}")
 tus_exportTarget(88emuplayer)
+# same install logic as createJucePlugin() in cmake/juce.cmake for the plugin formats
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH)
+	if(MSVC OR APPLE)
+		install(TARGETS 88emuplayer_VST DESTINATION . COMPONENT ${playerProductName}-VST2)
+	else()
+		install(TARGETS 88emuplayer_VST LIBRARY DESTINATION lib/vst/ COMPONENT ${playerProductName}-VST2)
+	endif()
+endif()
+if(USE_VST3)
+	if(APPLE)
+		install(TARGETS 88emuplayer_VST3 DESTINATION . COMPONENT ${playerProductName}-VST3)
+	else()
+		get_target_property(vst3OutputFolder 88emuplayer_VST3 ARCHIVE_OUTPUT_DIRECTORY)
+		if(UNIX)
+			set(vst3Dest lib/vst3)
+			set(vst3Pattern "*.so")
+		else()
+			set(vst3Dest .)
+			set(vst3Pattern "*.vst3")
+		endif()
+		install(DIRECTORY ${vst3OutputFolder}/${playerProductName}.vst3 DESTINATION ${vst3Dest}
+			COMPONENT ${playerProductName}-VST3
+			FILES_MATCHING PATTERN ${vst3Pattern} PATTERN "*.json")
+	endif()
+endif()
+if(USE_CLAP)
+	if(MSVC OR APPLE)
+		install(TARGETS 88emuplayer_CLAP DESTINATION . COMPONENT ${playerProductName}-CLAP)
+	elseif(UNIX)
+		install(TARGETS 88emuplayer_CLAP LIBRARY DESTINATION lib/clap/ COMPONENT ${playerProductName}-CLAP)
+	endif()
+endif()
+if(APPLE AND USE_AU)
+	install(TARGETS 88emuplayer_AU DESTINATION . COMPONENT ${playerProductName}-AU)
+	installMacSetupScript(. ${playerProductName}-AU)
+endif()
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-VST2
+		OPTIONAL)
+endif()
+if(USE_VST3)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-VST3
+		OPTIONAL)
+endif()
+if(USE_CLAP)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-CLAP
+		OPTIONAL)
+endif()
+if(APPLE AND USE_AU)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-AU
+		OPTIONAL)
+endif()
 # The generated changelog may be absent when this product has no entries.
 tus_registerChangelog(88emuplayer)
 install(FILES "${CMAKE_SOURCE_DIR}/LICENSE.md"
