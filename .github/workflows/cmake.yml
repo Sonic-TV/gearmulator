@@ -31,13 +31,18 @@ jobs:
       if: matrix.os == 'windows-2022'
       uses: ilammy/msvc-dev-cmd@v1
 
+    # standalone variants (e.g. 88emuPlayer) are opt-in via cmake flag
+    - name: Enable standalone builds on macOS
+      if: matrix.os == 'macos-14'
+      run: echo "CMAKE_ARGS=-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON" >> "$GITHUB_ENV"
+
     - name: Configure CMake with ${{ matrix.cmake_generator }}
       if: matrix.cmake_generator != 'default'
-      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -G ${{ matrix.cmake_generator }} -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{env.CMAKE_ARGS}}
 
     - name: Configure CMake with default generator
       if: matrix.cmake_generator == 'default'
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{env.CMAKE_ARGS}}
 
     # Turns compiler output into annotations, so a failed build reports the actual error
     # on the run and through the API instead of just a non-zero exit code.
@@ -56,3 +61,11 @@ jobs:
     - name: Pack
       working-directory: ${{github.workspace}}/build
       run: cmake -P ${{github.workspace}}/scripts/pack.cmake
+
+    - name: Upload packages
+      if: matrix.os == 'macos-14'
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-packages-${{ matrix.cmake_generator }}
+        path: ${{github.workspace}}/build/*.zip
+        if-no-files-found: error
