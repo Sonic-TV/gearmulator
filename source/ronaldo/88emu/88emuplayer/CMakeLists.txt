@@ -60,6 +60,17 @@ set(HARDWARE_ASSETS
 	${HARDWARE_SKIN_DIR}/value_knob.png
 )
 juce_add_binary_data(88emuplayer_BinaryData SOURCES ${HARDWARE_ASSETS})
+# same format gating as createJucePlugin() in cmake/juce.cmake
+set(emu88_formats Standalone)
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH)
+	list(APPEND emu88_formats VST)
+endif()
+if(USE_VST3)
+	list(APPEND emu88_formats VST3)
+endif()
+if(APPLE AND USE_AU)
+	list(APPEND emu88_formats AU)
+endif()
 juce_add_plugin(88emuplayer
 	# The 512px application icon supplies both ICNS and Windows ICO sizes.
 	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.png"
@@ -73,7 +84,7 @@ juce_add_plugin(88emuplayer
 	COPY_PLUGIN_AFTER_BUILD FALSE
 	PLUGIN_MANUFACTURER_CODE TusP
 	PLUGIN_CODE TscH
-	FORMATS Standalone
+	FORMATS ${emu88_formats}
 	PRODUCT_NAME "88emuPlayer"
 	PRODUCTS_FOLDER "${TUS_BIN_DIR}/plugins/$<CONFIG>"
 	BUNDLE_ID "com.theusualsuspects.SC88Hardware"
@@ -118,18 +129,117 @@ endif()
 if(TARGET PluginFormat_Standalone)
 	add_dependencies(PluginFormat_Standalone 88emuplayer_Standalone)
 endif()
-# The standalone player needs its own install rule and CPack component. No macOS setup script: the
-# README explains how to allow the quarantined app and CLI in System Settings.
+# same plugin format setup as createJucePlugin() in cmake/juce.cmake
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH AND TARGET PluginFormat_VST2)
+	add_dependencies(PluginFormat_VST2 88emuplayer_VST)
+endif()
+if(USE_VST3 AND TARGET PluginFormat_VST3)
+	add_dependencies(PluginFormat_VST3 88emuplayer_VST3)
+endif()
+if(USE_CLAP)
+	clap_juce_extensions_plugin(TARGET 88emuplayer
+		CLAP_ID "com.theusualsuspects.TscH"
+		CLAP_FEATURES instrument synthesizer
+		CLAP_SUPPORT_URL "https://dsp56300.wordpress.com"
+		CLAP_MANUAL_URL "https://dsp56300.wordpress.com"
+		CLAP_USE_JUCE_PARAMETER_RANGES "DISCRETE"
+		)
+	set_property(TARGET 88emuplayer_CLAP PROPERTY FOLDER "Ronaldo/88emu")
+	add_dependencies(88emuplayer_All 88emuplayer_CLAP)
+	if(TARGET PluginFormat_CLAP)
+		add_dependencies(PluginFormat_CLAP 88emuplayer_CLAP)
+	endif()
+	# The CLAP target is built by clap-juce-extensions rather than by JUCE, so it misses the
+	# version resource JUCE links into every format of its own.
+	if(WIN32 AND TARGET 88emuplayer_rc_lib)
+		target_link_libraries(88emuplayer_CLAP PRIVATE 88emuplayer_rc_lib)
+	endif()
+endif()
+# The standalone player needs its own install rule and CPack component.
 set(playerProductName "88emuPlayer")
+# The macOS quarantine removal script, as createJucePlugin() makes it. It must exist before the first
+# installMacSetupScript() below: that expands to install(FILES <empty>) where nothing created it, which
+# CMake accepts silently, so the Mac packages would ship without the script and nothing would complain.
 if(APPLE)
+	createMacSetupScript(${playerProductName})
 	install(TARGETS 88emuplayer_Standalone DESTINATION . COMPONENT ${playerProductName}-Standalone)
+	installMacSetupScript(. ${playerProductName}-Standalone)
 elseif(MSVC)
 	install(TARGETS 88emuplayer_Standalone RUNTIME DESTINATION . COMPONENT ${playerProductName}-Standalone)
 else()
 	install(TARGETS 88emuplayer_Standalone RUNTIME DESTINATION bin/ COMPONENT ${playerProductName}-Standalone)
 endif()
 set_target_properties(88emuplayer PROPERTIES TUS_PRODUCT_NAME "${playerProductName}")
+# the formats this product ships, same property createJucePlugin() sets
+set_target_properties(88emuplayer PROPERTIES TUS_PLUGIN_FORMATS "${emu88_formats}")
 tus_exportTarget(88emuplayer)
+# same install logic as createJucePlugin() in cmake/juce.cmake for the plugin formats
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH)
+	if(MSVC OR APPLE)
+		install(TARGETS 88emuplayer_VST DESTINATION . COMPONENT ${playerProductName}-VST2)
+		if(APPLE)
+			installMacSetupScript(. ${playerProductName}-VST2)
+		endif()
+	else()
+		install(TARGETS 88emuplayer_VST LIBRARY DESTINATION lib/vst/ COMPONENT ${playerProductName}-VST2)
+	endif()
+endif()
+if(USE_VST3)
+	if(APPLE)
+		install(TARGETS 88emuplayer_VST3 DESTINATION . COMPONENT ${playerProductName}-VST3)
+		installMacSetupScript(. ${playerProductName}-VST3)
+	else()
+		get_target_property(vst3OutputFolder 88emuplayer_VST3 ARCHIVE_OUTPUT_DIRECTORY)
+		if(UNIX)
+			set(vst3Dest lib/vst3)
+			set(vst3Pattern "*.so")
+		else()
+			set(vst3Dest .)
+			set(vst3Pattern "*.vst3")
+		endif()
+		install(DIRECTORY ${vst3OutputFolder}/${playerProductName}.vst3 DESTINATION ${vst3Dest}
+			COMPONENT ${playerProductName}-VST3
+			FILES_MATCHING PATTERN ${vst3Pattern} PATTERN "*.json")
+	endif()
+endif()
+if(USE_CLAP)
+	if(MSVC OR APPLE)
+		install(TARGETS 88emuplayer_CLAP DESTINATION . COMPONENT ${playerProductName}-CLAP)
+		if(APPLE)
+			installMacSetupScript(. ${playerProductName}-CLAP)
+		endif()
+	elseif(UNIX)
+		install(TARGETS 88emuplayer_CLAP LIBRARY DESTINATION lib/clap/ COMPONENT ${playerProductName}-CLAP)
+	endif()
+endif()
+if(APPLE AND USE_AU)
+	install(TARGETS 88emuplayer_AU DESTINATION . COMPONENT ${playerProductName}-AU)
+	installMacSetupScript(. ${playerProductName}-AU)
+endif()
+if(USE_VST2 AND JUCE_GLOBAL_VST2_SDK_PATH)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-VST2
+		OPTIONAL)
+endif()
+if(USE_VST3)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-VST3
+		OPTIONAL)
+endif()
+if(USE_CLAP)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-CLAP
+		OPTIONAL)
+endif()
+if(APPLE AND USE_AU)
+	install(FILES "${CMAKE_SOURCE_DIR}/doc/changelog_split/changelog_${playerProductName}.txt"
+		DESTINATION .
+		COMPONENT ${playerProductName}-AU
+		OPTIONAL)
+endif()
 # The generated changelog may be absent when this product has no entries.
 tus_registerChangelog(88emuplayer)
 install(FILES "${CMAKE_SOURCE_DIR}/LICENSE.md"
