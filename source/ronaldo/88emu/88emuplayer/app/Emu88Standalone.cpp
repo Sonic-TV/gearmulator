@@ -13,7 +13,11 @@
 #include "juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h"
 #if JUCE_WINDOWS
 #include <windows.h>
-#undef MessageBox	// would turn genericUI::MessageBox into MessageBoxA
+// windows.h maps the MessageBox identifier to MessageBoxA/W, which would turn
+// genericUI::MessageBox below into MessageBoxA
+#ifdef MessageBox
+#undef MessageBox
+#endif
 #else
 #include <unistd.h>
 #endif
