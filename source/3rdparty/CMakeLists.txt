@@ -57,6 +57,12 @@ if(NOT EMSCRIPTEN)
 	set(CPPTERMINAL_ENABLE_TESING OFF CACHE BOOL "" FORCE)
 	add_subdirectory(cpp-terminal EXCLUDE_FROM_ALL)
 
+	# prompt.cpp contains UTF-8 string literals; without this, MSVC misparses
+	# them on systems with a CJK ANSI codepage ("newline in constant" errors)
+	if(MSVC)
+		target_compile_options(cpp-terminal PRIVATE "/utf-8")
+	endif()
+
 	if(NOT ANDROID)
 		add_subdirectory(portmidi EXCLUDE_FROM_ALL)
 	endif()
