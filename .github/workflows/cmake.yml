@@ -65,10 +65,76 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: cmake -P ${{github.workspace}}/scripts/pack.cmake
 
-    - name: Upload packages
+    # Keep each product in its own artifact. CPack emits one archive per product
+    # and format; uploading the whole build directory as one artifact hides that
+    # separation and makes it hard to download just one plugin.
+    - name: Upload Osirus packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-Osirus
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-Osirus-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-Osirus-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-Osirus-*.rpm
+        if-no-files-found: error
+
+    - name: Upload OsTIrus packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-OsTIrus
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-OsTIrus-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-OsTIrus-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-OsTIrus-*.rpm
+        if-no-files-found: error
+
+    - name: Upload Vavra packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-Vavra
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-Vavra-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-Vavra-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-Vavra-*.rpm
+        if-no-files-found: error
+
+    - name: Upload Xenia packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-Xenia
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-Xenia-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-Xenia-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-Xenia-*.rpm
+        if-no-files-found: error
+
+    - name: Upload NodalRed2x packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-NodalRed2x
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-NodalRed2x-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-NodalRed2x-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-NodalRed2x-*.rpm
+        if-no-files-found: error
+
+    - name: Upload JE8086 packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-JE8086
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-JE8086-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-JE8086-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-JE8086-*.rpm
+        if-no-files-found: error
+
+    - name: Upload 88emuPlayer packages
       if: matrix.os == 'macos-14'
       uses: actions/upload-artifact@v4
       with:
-        name: macos-packages-${{ matrix.cmake_generator }}
-        path: ${{github.workspace}}/build/*.zip
+        name: ${{ matrix.os }}-${{ matrix.cmake_generator }}-88emuPlayer
+        path: |
+          ${{github.workspace}}/build/TheUsualSuspects-88emuPlayer-*.zip
+          ${{github.workspace}}/build/TheUsualSuspects-88emuPlayer-*.deb
+          ${{github.workspace}}/build/TheUsualSuspects-88emuPlayer-*.rpm
         if-no-files-found: error
