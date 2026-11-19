@@ -3,7 +3,7 @@ name: macOS 88emu
 on:
   workflow_dispatch:
   push:
-    branches: [codex/88emu-20261119]
+    branches: ['codex/88emu-*']
 
 jobs:
   build:
