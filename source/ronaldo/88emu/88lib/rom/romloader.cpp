@@ -55,6 +55,10 @@ namespace emu88Lib
             return RomDevice::Sc88Pro;
         case DeviceModel::VeGsPro:
             return RomDevice::VeGsPro;
+        case DeviceModel::Sk88Pro:
+            return RomDevice::Sk88Pro;
+        case DeviceModel::Sc880:
+            return RomDevice::Sc880;
         case DeviceModel::Sc8850:
             return RomDevice::Sc8850;
         case DeviceModel::Sc55Mk2:
@@ -87,6 +91,8 @@ namespace emu88Lib
             return RomDevice::Cm32ln;
         case DeviceModel::Mv30:
             return RomDevice::Mv30;
+        case DeviceModel::ProE:
+            return RomDevice::ProE;
         }
         return RomDevice::Sc88;
     }
@@ -117,7 +123,10 @@ namespace emu88Lib
     Sc88ProRomSet RomLoader::findSc88ProRomSet(const RomDevice _device)
     {
         const auto inventory = scan();
-        if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro) || !inventory.isComplete(_device))
+        const bool sk88Pro = _device == RomDevice::Sk88Pro;
+        if ((_device != RomDevice::Sc88Pro && _device != RomDevice::VeGsPro && _device != RomDevice::Sc880 &&
+             !sk88Pro) ||
+            !inventory.isComplete(_device))
             return {};
 
         Sc88ProRomSet result;
@@ -127,7 +136,18 @@ namespace emu88Lib
             !inventory.read(result.waveC, _device, RomSlot::Wave, 2))
             return {};
 
-        if (const auto* found = inventory.find(_device, RomSlot::Control))
+        // The SK-88Pro runs its own program EPROM; the control ROM read above only supplies
+        // the tone data of its parameter mask ROM.
+        const auto nameSlot = sk88Pro ? RomSlot::Program : RomSlot::Control;
+        if (sk88Pro)
+        {
+            std::vector<uint8_t> program;
+            if (!inventory.read(program, _device, RomSlot::Program))
+                return {};
+            result.firmware = buildSk88ProImage(program, result.firmware);
+        }
+
+        if (const auto* found = inventory.find(_device, nameSlot))
             result.firmwareName =
                 found->entry ? describe(*found->entry) : baseLib::filesystem::getFilenameWithoutPath(found->path);
 
@@ -223,6 +243,18 @@ namespace emu88Lib
             if (!inventory.read(result.waves[i], RomDevice::Mv30, RomSlot::Wave, i))
                 return {};
         return result.isValid() ? result : Mv30RomSet{};
+    }
+
+    ProERomSet RomLoader::findProERomSet()
+    {
+        const auto inventory = scan();
+        ProERomSet result;
+        if (!inventory.read(result.program, RomDevice::ProE, RomSlot::Program))
+            return {};
+        for (uint8_t i = 0; i < result.patterns.size(); ++i)
+            if (!inventory.read(result.patterns[i], RomDevice::ProE, RomSlot::Data, i))
+                return {};
+        return result.isValid() ? result : ProERomSet{};
     }
 
     LaRomSet RomLoader::findLaRomSet(const LaModel _model)

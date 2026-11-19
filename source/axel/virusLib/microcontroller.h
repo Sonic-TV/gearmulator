@@ -73,9 +73,19 @@ public:
 	uint8_t getPartMidiChannel(uint8_t _part) const;
 	bool isPolyPressureForPageBEnabled() const;
 
+	// From now on the C++ arpeggiator plays what the patches' arpeggiators play: every patch, and every change to Arp
+	// Mode, reaches the firmware with the arpeggiator off. The patches keep theirs, see virusLib::Arpeggiator
+	void useCppArpeggiator();
+
+	// For every MIDI channel, the patch whose arpeggiator plays there, nullptr if none: the single on the global
+	// channel in single mode. In multi mode the lowest enabled part on a channel, or the lowest one with an arpeggiator
+	void getArpeggiatorSingles(std::array<const TPreset*, 16>& _singles) const;
+
 private:
 	static bool isMultiPartParameter(uint8_t _param);
+	uint8_t firmwareArpMode(Page _page, uint8_t _param, uint8_t _value) const;
 	bool send(Page page, uint8_t part, uint8_t param, uint8_t value);
+	bool sendParameterChange(Page _page, uint8_t _part, uint8_t _param, uint8_t _value);
 	void sendControlCommand(ControlCommand command, uint8_t value);
 	bool sendPreset(uint8_t program, const TPreset& _data, bool isMulti = false);
 	void writeHostBitsWithWait(uint8_t flag0, uint8_t flag1);
@@ -100,7 +110,7 @@ private:
 	void receiveUpgradedPreset();
 	bool processMIDI(const synthLib::SMidiEvent& _ev, FrontpanelState* _fpState);
 
-	static bool isValid(const TPreset& _preset);
+	static bool isValid(const TPreset& _preset, bool _isMulti);
 
 	Hdi08List m_hdi08;
 	std::vector<Hdi08TxParser> m_hdi08TxParsers;
@@ -130,7 +140,6 @@ private:
 	{
 		uint8_t program = 0;
 		bool isMulti = false;
-		TPreset data;
 	};
 
 	std::list<SPendingPresetWrite> m_pendingPresetWrites;
@@ -151,6 +160,7 @@ private:
 	// and the writing side of the MIDI queues, and m_loadingState
 	mutable std::recursive_mutex m_mutex;
 	bool m_loadingState = false;
+	bool m_cppArpeggiator = false;
 };
 
 }

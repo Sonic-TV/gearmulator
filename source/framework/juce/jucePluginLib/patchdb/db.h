@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <list>
@@ -143,6 +144,8 @@ namespace pluginLib::patchDB
 		bool internalRemoveTag(TagType _type, const Tag& _tag);
 
 		bool executeSearch(Search& _search);
+		// whether _patch is a match for a search by the content of _requestPatch
+		bool matchesPatchContent(const PatchPtr& _requestPatch, const PatchPtr& _patch) const;
 		void updateSearches(const std::vector<PatchPtr>& _patches);
 		bool removePatchesFromSearches(const std::vector<PatchPtr>& _keys);
 
@@ -185,6 +188,9 @@ namespace pluginLib::patchDB
 
 		// loader
 		JobQueue m_loader;
+		// stopping the loader drops the jobs queued behind its stop, the data is complete only if every job ran
+		std::atomic<uint32_t> m_loaderJobsQueued{0};
+		std::atomic<uint32_t> m_loaderJobsDone{0};
 
 		// ui
 		std::mutex m_uiMutex;

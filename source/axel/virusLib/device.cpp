@@ -9,6 +9,7 @@
 #include "synthLib/deviceException.h"
 #include "synthLib/midiToSysex.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 
@@ -72,6 +73,13 @@ namespace virusLib
 		// as we do not connect them
 		m_midiTimestamps = m_rom.isTIFamily() && m_mc->enableMidiTimestamps();
 
+		// a busy TI DSP hands notes to the other one, which plays them late (BUG-10510)
+		if(m_dsp2)
+		{
+			DspMultiTI::disableNoteHandover(*m_dsp);
+			DspMultiTI::disableNoteHandover(*m_dsp2);
+		}
+
 		// the OS loses what does not fit into its input rings, send it only as much as they hold (EMU-239)
 		m_mc->enableHdi08FlowControl();
 
@@ -80,6 +88,16 @@ namespace virusLib
 		dummyProcess(8);
 
 		m_mc->createDefaultState();
+
+		// The arpeggiator is played in C++ once the plugin asks for it, see processArpeggiators()
+		if(!m_arpeggiator.readPatterns(m_dsp->getMemory(), m_rom.getModel()))
+			LOG("Arpeggiator patterns not found in this firmware, the firmware keeps playing its own arpeggiator");
+
+		// The TI family OS plays an event at its timestamp up to 1023 samples ahead (x:$5586c in OS 5.1.7, it may
+		// take less, and holds what is further ahead back until it is within), ours is up to 127 ahead already. The
+		// C++ arpeggiator plays its notes as far ahead as that leaves, as the firmware plays its own (BUG-10510)
+		if(m_midiTimestamps)
+			m_arpeggiator.setLead(0x3ff - 127);
 	}
 
 	Device::~Device()
@@ -208,9 +226,63 @@ namespace virusLib
 		_midiOut.push_back(m_frontpanelStateMidiEvent);
 	}
 
+	bool Device::hasArpeggiators() const
+	{
+		return m_arpeggiator.isValid();
+	}
+
+	void Device::processArpeggiators(std::vector<synthLib::SMidiEvent>& _midi, std::vector<synthLib::SMidiEvent>& _out,
+		const uint32_t _sampleCount)
+	{
+		// The firmware's arpeggiator follows MIDI clock and drifts from the host. Once a host tells where it is, the
+		// arpeggio is played here instead. Without one, the test consoles for example, the firmware keeps its own
+		if(!m_cppArpeggiator)
+		{
+			const auto hasTransport = std::any_of(_midi.begin(), _midi.end(), [](const synthLib::SMidiEvent& _e)
+			{
+				return _e.type == synthLib::MidiEventType::HostTransport;
+			});
+
+			if(!hasTransport)
+				return;
+
+			m_cppArpeggiator = true;
+			m_mc->useCppArpeggiator();
+		}
+
+		std::array<const ROMFile::TPreset*, 16> singles;
+		m_mc->getArpeggiatorSingles(singles);
+
+		m_arpeggiator.process(singles, _midi, _out, _sampleCount, m_samplerate);
+	}
+
 	bool Device::getState(std::vector<uint8_t>& _state, const synthLib::StateType _type)
 	{
 		return m_mc->getState(_state, _type);
+	}
+
+	bool Device::getStateWithPendingMidi(std::vector<uint8_t>& _state, const synthLib::StateType _type, const std::vector<synthLib::SMidiEvent>& _pendingMidi)
+	{
+		if(!getState(_state, _type))
+			return false;
+
+		// What the editor sent waits for the next process() call: a Multi from the patch manager, a play mode switch, a
+		// parameter edit. A host that saves without processing the plug-in in between, a bypassed one for example, lost
+		// it (BUG-10568). Behind the state, a restore applies it the way process() would have
+		for (const auto& ev : _pendingMidi)
+		{
+			const auto& s = ev.sysex;
+
+			if(s.size() < 7 || s[1] != 0x00 || s[2] != 0x20 || s[3] != 0x33)
+				continue;
+
+			const auto cmd = s[6];
+
+			if(cmd == DUMP_SINGLE || cmd == DUMP_MULTI || (cmd >= PAGE_6E && cmd <= PAGE_D))
+				_state.insert(_state.end(), s.begin(), s.end());
+		}
+
+		return true;
 	}
 
 	bool Device::setState(const std::vector<uint8_t>& _state, synthLib::StateType _type)

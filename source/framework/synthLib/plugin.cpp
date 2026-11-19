@@ -135,9 +135,19 @@ namespace synthLib
 			m_midiIn.insert(m_midiIn.begin(), marker);
 		}
 
+		// Where the host is, for everything in the device that follows it, the arpeggiator for example. It goes first,
+		// after a discontinuity marker, so that the device knows the position before the notes at the block start
+		{
+			SMidiEvent transport(MidiEventSource::Internal);
+			transport.type = MidiEventType::HostTransport;
+			transport.transport = {_ppqPos, _bpm, _isPlaying, _hasPpqPosition};
+			const auto first = discontinuity != TransportDiscontinuity::None ? 1 : 0;
+			stampTransportGeneration(*m_midiIn.insert(m_midiIn.begin() + first, transport));
+		}
+
 		processMidiInEvents();
 		insertLoopWraps(_bpm, _ppqPos, _isPlaying, _hasPpqPosition, _count, _loop);
-		processMidiClock(_bpm, static_cast<float>(_ppqPos), _isPlaying, _count);
+		processMidiClock(_bpm, _ppqPos, _isPlaying, _count);
 
 		m_resampler.process(inputs, outputs, m_midiIn, m_midiOut, static_cast<uint32_t>(_count), 
 			[&](const TAudioInputs& _ins, const TAudioOutputs& _outs, size_t _c, const ResamplerInOut::TMidiVec& _midiIn, ResamplerInOut::TMidiVec& _midiOut)
@@ -289,7 +299,7 @@ namespace synthLib
 			m_midiClock.restart();
 	}
 
-	void Plugin::processMidiClock(const float _bpm, const float _ppqPos, const bool _isPlaying, const size_t _sampleCount)
+	void Plugin::processMidiClock(const float _bpm, const double _ppqPos, const bool _isPlaying, const size_t _sampleCount)
 	{
 		if (m_midiClockEnabled)
 			m_midiClock.process(_bpm, _ppqPos, _isPlaying, _sampleCount);
@@ -338,8 +348,8 @@ namespace synthLib
 		const auto latency = static_cast<uint32_t>(std::ceil(static_cast<float>(m_blockSize * m_extraLatencyBlocks) * m_device->getSamplerate() * m_hostSamplerateInv));
 		m_device->setExtraLatencySamples(latency);
 
-		m_deviceLatencyMidiToOutput = static_cast<uint32_t>(static_cast<float>(m_device->getInternalLatencyMidiToOutput()) * m_hostSamplerate / m_device->getSamplerate());
-		m_deviceLatencyInputToOutput = static_cast<uint32_t>(static_cast<float>(m_device->getInternalLatencyInputToOutput()) * m_hostSamplerate / m_device->getSamplerate());
+		m_deviceLatencyMidiToOutput = static_cast<float>(m_device->getInternalLatencyMidiToOutput()) * m_hostSamplerate / m_device->getSamplerate();
+		m_deviceLatencyInputToOutput = static_cast<float>(m_device->getInternalLatencyInputToOutput()) * m_hostSamplerate / m_device->getSamplerate();
 
 		updateLatencies();
 	}
@@ -350,8 +360,10 @@ namespace synthLib
 		const auto out = m_resampler.getOutputLatency();
 		const auto in = m_resampler.getInputLatency();
 
-		m_latencyMidiToOutput.store(blocks + m_deviceLatencyMidiToOutput + out, std::memory_order_relaxed);
-		m_latencyInputToOutput.store(blocks + m_deviceLatencyInputToOutput + out + in, std::memory_order_relaxed);
+		const auto round = [](const float _samples) { return static_cast<uint32_t>(std::lround(_samples)); };
+
+		m_latencyMidiToOutput.store(blocks + round(m_deviceLatencyMidiToOutput + out), std::memory_order_relaxed);
+		m_latencyInputToOutput.store(blocks + round(m_deviceLatencyInputToOutput + out + in), std::memory_order_relaxed);
 	}
 
 	void Plugin::processMidiInEvents()
@@ -501,7 +513,16 @@ namespace synthLib
 			{
 				return _event.offset >= offset && _event.type != MidiEventType::TransportDiscontinuity;
 			});
-			m_midiIn.insert(it, marker);
+			const auto markerIt = m_midiIn.insert(it, marker);
+
+			// Where the host is from there on, the start of the loop, so that the arpeggiator follows the wrap on its
+			// sample and not with the next block
+			SMidiEvent transport(MidiEventSource::Internal);
+			transport.type = MidiEventType::HostTransport;
+			transport.transport = {_loop.ppqStart - (wrapAt - offset) / samplesPerQuarter, _bpm, true, true};
+			transport.offset = offset;
+			stampTransportGeneration(transport);
+			m_midiIn.insert(markerIt + 1, transport);
 
 			m_loopWrapPpq += length;
 		}

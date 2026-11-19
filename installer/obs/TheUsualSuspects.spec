@@ -1,5 +1,5 @@
 Name:           TheUsualSuspects
-Version:        2.2.25
+Version:        2.2.27
 Release:        0
 Summary:        Emulations of classic virtual analog synthesizers
 License:        GPL-3.0-or-later
@@ -24,6 +24,13 @@ BuildRequires:  pkgconfig(xcursor)
 BuildRequires:  pkgconfig(xext)
 BuildRequires:  pkgconfig(xinerama)
 BuildRequires:  pkgconfig(xrandr)
+# the JACK headers for the standalones, JUCE loads libjack at run time; a named package,
+# pkgconfig(jack) has two providers on both (jack and pipewire)
+%if 0%{?fedora}
+BuildRequires:  pipewire-jack-audio-connection-kit-devel
+%else
+BuildRequires:  libjack-devel
+%endif
 
 # The DSP56300 JIT only has x86_64 and aarch64 backends.
 ExclusiveArch:  x86_64 aarch64
@@ -108,7 +115,8 @@ included.
     -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON \
     -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=ON \
     -Dgearmulator_BUILD_JUCEPLUGIN_LV2=ON \
-    -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON
+    -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON \
+    -Dgearmulator_BUILD_INSTALLER=OFF
 
 %cmake_build
 

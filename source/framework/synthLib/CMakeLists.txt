@@ -7,8 +7,10 @@ set(SOURCES
 	midi/songReset.h midi/songReset.cpp
 	midi/midiFile.h midi/smfReader.cpp midi/rcpDecoder.cpp midi/rcpInternal.h midi/rcpTrack.cpp midi/rcpTempo.cpp
 	analog/analogFilter.cpp analog/analogFilter.h
+	arpeggiator.cpp arpeggiator.h
 	audiobuffer.cpp audiobuffer.h
 	audioTypes.h
+	boardThread.h
 	consoleTools.cpp consoleTools.h
 	dac.cpp dac.h
 	dcFilter.h
@@ -17,6 +19,7 @@ set(SOURCES
 	deviceTypes.h
 	dspClockDevice.h
 	frontPanelSysex.cpp frontPanelSysex.h
+	hostAudioWorkgroup.cpp hostAudioWorkgroup.h
 	lcdfonts.cpp lcdfonts.h
 	lv2PresetExport.cpp lv2PresetExport.h
 	midiBufferParser.cpp midiBufferParser.h
@@ -66,6 +69,10 @@ if(NOT MSVC)
 	target_link_libraries(synthLib PUBLIC dl)
 endif()
 
+if(APPLE)
+	target_link_libraries(synthLib PRIVATE "-framework CoreAudio")	# hostAudioWorkgroup.cpp
+endif()
+
 if(UNIX AND NOT APPLE)
 	set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 	find_package(Threads REQUIRED)
@@ -77,6 +84,11 @@ set_property(TARGET synthLib PROPERTY FOLDER "Gearmulator")
 target_include_directories(synthLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 if(BUILD_TESTING)
+	add_executable(arpeggiator_test arpeggiator_test.cpp)
+	target_link_libraries(arpeggiator_test PRIVATE synthLib)
+	set_property(TARGET arpeggiator_test PROPERTY FOLDER "Tests")
+	add_test(NAME arpeggiator COMMAND arpeggiator_test)
+
 	add_executable(dcFilter_test dcFilter_test.cpp)
 	target_link_libraries(dcFilter_test PRIVATE synthLib)
 	set_property(TARGET dcFilter_test PROPERTY FOLDER "Tests")
@@ -91,6 +103,11 @@ if(BUILD_TESTING)
 	target_link_libraries(resamplerLatency_test PRIVATE synthLib)
 	set_property(TARGET resamplerLatency_test PROPERTY FOLDER "Tests")
 	add_test(NAME resamplerLatency COMMAND resamplerLatency_test)
+
+	add_executable(boardThread_test boardThread_test.cpp)
+	target_link_libraries(boardThread_test PRIVATE synthLib)
+	set_property(TARGET boardThread_test PROPERTY FOLDER "Tests")
+	add_test(NAME boardThread COMMAND boardThread_test)
 
 	add_executable(midiRateLimiter_test midiRateLimiter_test.cpp)
 	target_link_libraries(midiRateLimiter_test PRIVATE synthLib)

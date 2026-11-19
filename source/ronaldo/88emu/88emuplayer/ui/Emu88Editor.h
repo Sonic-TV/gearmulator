@@ -131,6 +131,7 @@ namespace emu88Player
 		void showKeyboard();
 		KeyboardShortcutGroups buildKeyboardGroups();
 		static KeyboardShortcutGroups buildMv30KeyboardGroups();
+		static KeyboardShortcutGroups buildProEKeyboardGroups();
 		void initialiseSettings(const char* _pageId, const char* _buttonId);
 		void selectSettingsPage(const char* _pageId, const char* _buttonId);
 		void populateSkinSettings();
@@ -138,8 +139,8 @@ namespace emu88Player
 		void showRomNotices();
 		void showMissingRomNotice(emu88Lib::DeviceModel _model);
 		void showRomWarnings() const;
-		void browsePcmCard();
-		void applyPcmCardPath(const std::string& _path);
+		void browseCard(Processor::CardSlot _slot);
+		void applyCardPath(Processor::CardSlot _slot, const std::string& _path);
 
 		void timerCallback() override;
 		void setPointerButton(uint32_t _button, bool _pressed);
@@ -170,7 +171,7 @@ namespace emu88Player
 		std::unique_ptr<genericUI::MessageBox::FileDialog> m_playlistChooser;
 		std::unique_ptr<genericUI::MessageBox::FileDialog> m_playlistFileChooser;
 		std::unique_ptr<genericUI::MessageBox::FileDialog> m_recordingChooser;
-		std::unique_ptr<genericUI::MessageBox::FileDialog> m_pcmCardChooser;
+		std::unique_ptr<genericUI::MessageBox::FileDialog> m_cardChooser;
 		std::unique_ptr<TitleBarButton> m_recordButton;
 		Skin m_skin;
 		std::map<std::string, std::vector<char>> m_fileCache;
@@ -179,7 +180,8 @@ namespace emu88Player
 		Rml::Element* m_playerPlayGraphic = nullptr;
 		Rml::Element* m_playerPauseGraphic = nullptr;
 		std::array<Rml::Element*, 32> m_buttonElements{};
-		std::array<Rml::Element*, 8> m_leds{};
+		// One per bit of the display snapshot's leds, in the board's order.
+		std::array<Rml::Element*, 16> m_leds{};
 		float m_valueKnobDownX = 0.0f;
 		float m_valueKnobDownY = 0.0f;
 		uint32_t m_pointerButtons = 0;

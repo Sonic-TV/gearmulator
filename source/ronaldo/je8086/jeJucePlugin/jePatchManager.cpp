@@ -1,5 +1,7 @@
 #include "jePatchManager.h"
 
+#include <cstring>
+
 #include "jeEditor.h"
 #include "jeLcd.h"
 
@@ -18,73 +20,84 @@ namespace jeJucePlugin
 	PatchManager::PatchManager(AudioPluginAudioProcessor& _processor)
 	: jucePluginEditorLib::patchManager::PatchManager(_processor, DefaultGroupTypes)
 	, m_controller(static_cast<Controller&>(_processor.getController()))
+	, m_processor(_processor)
 	{
 		setTagTypeName(pluginLib::patchDB::TagType::CustomA, "Type");
 		addGroupTreeItemForTag(pluginLib::patchDB::TagType::CustomA);
 
-		const auto& roms = _processor.getRoms();
+		PatchManager::startLoaderThread();
 
-		// add each device type only once
-		std::set<jeLib::DeviceType> knownDeviceTypes;
+		// retained, adds the banks of the ROMs found so far right away. A reboot appends the ROMs it found, a state loaded
+		// by the host selects another one on the host's thread
+		m_onFirmwareChanged.set(_processor.evFirmwareChanged, [this](uint32_t)
+		{
+			addRomBanks();
+		});
+	}
 
-		uint32_t bankIndex = 0;
-
-		// The loader thread reads m_presetsPerBank (loadRomData), so the table is complete before it starts
+	void PatchManager::addRomBanks()
+	{
 		std::vector<pluginLib::patchDB::DataSource> romBanks;
 
-		for (const auto& rom : roms)
 		{
-			if (!rom.isValid())
-				continue;
+			// the loader thread reads m_presetsPerBank (loadRomData)
+			const std::lock_guard lock(m_romBanksMutex);
 
-			if (!knownDeviceTypes.insert(rom.getDeviceType()).second)
-				continue;
+			auto bankIndex = static_cast<uint32_t>(m_presetsPerBank.size());
 
-			std::vector<std::vector<jeLib::Rom::Preset>> presets;
-			rom.getPresets(presets);
-
-			if (presets.empty())
-				continue;
-
-			for (auto p : presets)
-				m_presetsPerBank.emplace_back(std::move(p));
-
-			auto addRomBank = [&romBanks, &bankIndex](const std::string& _name)
+			for (const auto* rom : m_processor.getRoms())
 			{
-				pluginLib::patchDB::DataSource ds;
-				ds.type = pluginLib::patchDB::SourceType::Rom;
-				ds.bank = bankIndex;
-				ds.name = _name;
-				ds.midiBankNumber = bankIndex;
-				++bankIndex;
-				romBanks.push_back(std::move(ds));
-			};
+				if (!rom->isValid())
+					continue;
 
-			if (presets.size() == 3)
-			{
-				// keyboard: two banks of patches, one bank of performances
-				addRomBank("Keyboard - Patch P:A11 - P:A88");
-				addRomBank("Keyboard - Patch P:B11 - P:B88");
-				addRomBank("Keyboard - Performance P:11 - P:88");
-			}
-			else
-			{
-				addRomBank("Rack - Patch P1:A11 - P1:A88");
-				addRomBank("Rack - Patch P1:B11 - P1:B88");
-				addRomBank("Rack - Patch P2:A11 - P2:A88");
-				addRomBank("Rack - Patch P2:B11 - P2:B88");
-				addRomBank("Rack - Patch P3:A11 - P3:A88");
-				addRomBank("Rack - Patch P3:B11 - P3:B88");
-				addRomBank("Rack - Patch P4:A11 - P4:A88");
-				addRomBank("Rack - Patch P4:B11 - P4:B88");
-				addRomBank("Rack - Performance P1:11 - P1:88");
-				addRomBank("Rack - Performance P2:11 - P2:88");
-				addRomBank("Rack - Performance P3:11 - P3:88");
-				addRomBank("Rack - Performance P4:11 - P4:88");
+				// add each device type only once
+				if (!m_romDeviceTypes.insert(rom->getDeviceType()).second)
+					continue;
+
+				std::vector<std::vector<jeLib::Rom::Preset>> presets;
+				rom->getPresets(presets);
+
+				if (presets.empty())
+					continue;
+
+				for (auto p : presets)
+					m_presetsPerBank.emplace_back(std::move(p));
+
+				auto addRomBank = [&romBanks, &bankIndex](const std::string& _name)
+				{
+					pluginLib::patchDB::DataSource ds;
+					ds.type = pluginLib::patchDB::SourceType::Rom;
+					ds.bank = bankIndex;
+					ds.name = _name;
+					ds.midiBankNumber = bankIndex;
+					++bankIndex;
+					romBanks.push_back(std::move(ds));
+				};
+
+				if (presets.size() == 3)
+				{
+					// keyboard: two banks of patches, one bank of performances
+					addRomBank("Keyboard - Patch P:A11 - P:A88");
+					addRomBank("Keyboard - Patch P:B11 - P:B88");
+					addRomBank("Keyboard - Performance P:11 - P:88");
+				}
+				else
+				{
+					addRomBank("Rack - Patch P1:A11 - P1:A88");
+					addRomBank("Rack - Patch P1:B11 - P1:B88");
+					addRomBank("Rack - Patch P2:A11 - P2:A88");
+					addRomBank("Rack - Patch P2:B11 - P2:B88");
+					addRomBank("Rack - Patch P3:A11 - P3:A88");
+					addRomBank("Rack - Patch P3:B11 - P3:B88");
+					addRomBank("Rack - Patch P4:A11 - P4:A88");
+					addRomBank("Rack - Patch P4:B11 - P4:B88");
+					addRomBank("Rack - Performance P1:11 - P1:88");
+					addRomBank("Rack - Performance P2:11 - P2:88");
+					addRomBank("Rack - Performance P3:11 - P3:88");
+					addRomBank("Rack - Performance P4:11 - P4:88");
+				}
 			}
 		}
-
-		PatchManager::startLoaderThread();
 
 		for (const auto& ds : romBanks)
 			addDataSource(ds);
@@ -97,6 +110,8 @@ namespace jeJucePlugin
 
 	bool PatchManager::loadRomData(pluginLib::patchDB::DataList& _results, const uint32_t _bank, uint32_t _program)
 	{
+		const std::lock_guard lock(m_romBanksMutex);
+
 		if (_bank >= m_presetsPerBank.size())
 			return false;
 
@@ -135,7 +150,7 @@ namespace jeJucePlugin
 		if (!name)
 			return {};
 
-		// why this is so complicated: Multiple sysex messages are combined in _sysex, but we only want to hash the actual patch data
+		// _sysex holds several messages, hash only their payloads
 		std::vector<uint8_t> temp;
 		temp.reserve(_sysex.size());
 
@@ -430,8 +445,8 @@ namespace jeJucePlugin
 			return false;
 		}
 
-		// patches might be split into multiple sysex messages, try to merge them
-		std::vector<std::map<uint32_t, std::vector<pluginLib::patchDB::Data>>> sameAddressPatches;
+		// a patch may be split into several sysex messages: merge them
+		std::vector<std::vector<pluginLib::patchDB::Data>> patchGroups;
 
 		bool foundTempPerformanceCommon = false;
 
@@ -440,9 +455,7 @@ namespace jeJucePlugin
 			auto addr = jeLib::State::getAddress(d);
 			auto area = jeLib::State::getAddressArea(addr);
 
-			// surprisingly there are indeeed files around that contain edit buffer dumps.
-			// The problem is that we do not know if PatchUpper or PatchLower is part of a performance or individual.
-			// We treat all of them individual if there is no PerformanceCommon dump
+			// edit buffer dumps: PatchUpper / PatchLower belong to a performance only if a PerformanceCommon dump is present
 			if (area == jeLib::AddressArea::PerformanceTemp)
 			{
 				const auto type = static_cast<jeLib::PerformanceData>(addr & static_cast<uint32_t>(jeLib::PerformanceData::BlockMask));
@@ -450,7 +463,6 @@ namespace jeJucePlugin
 				if (type == jeLib::PerformanceData::PerformanceCommon)
 					foundTempPerformanceCommon = true;
 
-				// if there is any performance common dump in there, treat all subsequent dumps as user performance dumps
 				if (foundTempPerformanceCommon)
 				{
 					addr &= ~static_cast<uint32_t>(jeLib::AddressArea::PerformanceTemp);
@@ -461,14 +473,11 @@ namespace jeJucePlugin
 				}
 				else if (type == jeLib::PerformanceData::PatchUpper || type == jeLib::PerformanceData::PatchLower)
 				{
-					// otherwise, treat them as user patches at bank 0 program 0
 					addr = static_cast<uint32_t>(jeLib::AddressArea::UserPatch);
 					jeLib::State::setAddress(d, addr);
 					area = jeLib::State::getAddressArea(addr);
 				}
 			}
-
-			// group sysex messages that belong to the same patch
 
 			if (area != jeLib::AddressArea::UserPatch && area != jeLib::AddressArea::UserPerformance)
 			{
@@ -476,45 +485,34 @@ namespace jeJucePlugin
 				continue;
 			}
 
-			uint32_t mask;
+			const auto blockMask = area == jeLib::AddressArea::UserPerformance
+				? static_cast<uint32_t>(jeLib::UserPerformanceArea::BlockMask)
+				: static_cast<uint32_t>(jeLib::UserPatchArea::BlockMask);
 
-			if (area == jeLib::AddressArea::UserPerformance)
-				mask = static_cast<uint32_t>(jeLib::UserPerformanceArea::BlockMask);
-			else
-				mask = static_cast<uint32_t>(jeLib::UserPatchArea::BlockMask);
+			// a dump at a block start begins a new patch. Only the offset within the block is looked at, some stored
+			// dumps carry a wrong program number
+			if ((addr & blockMask) == 0)
+				patchGroups.emplace_back();
 
-			if ((addr & mask) == 0)
-				sameAddressPatches.emplace_back(); // new patch/performance, create new map
-
-			mask = ~mask;
-
-			// ignore the key. We messed up patch saving in a previous version that causes some
-			// dumps to point to performance 0 all the time.
-			constexpr uint32_t key = 0;//addr & mask;
-
-			// this can only happen if the dumps are corrupted
-			assert(!sameAddressPatches.empty());
-			if (sameAddressPatches.empty())
+			assert(!patchGroups.empty());
+			if (patchGroups.empty())
 				continue;
 
-			sameAddressPatches.back()[key].emplace_back(std::move(d));
+			patchGroups.back().emplace_back(std::move(d));
 		}
 
-		for (auto& p : sameAddressPatches)
+		for (auto& patches : patchGroups)
 		{
-			for (auto& [key, patches] : p)
+			if (patches.size() == 1)
 			{
-				if (patches.size() == 1)
-				{
-					_results.emplace_back(std::move(patches.front()));
-					continue;
-				}
-
-				auto& e = _results.emplace_back();
-
-				for (auto& p : patches)
-					e.insert(e.end(), p.begin(), p.end());
+				_results.emplace_back(std::move(patches.front()));
+				continue;
 			}
+
+			auto& e = _results.emplace_back();
+
+			for (auto& p : patches)
+				e.insert(e.end(), p.begin(), p.end());
 		}
 
 		return true;

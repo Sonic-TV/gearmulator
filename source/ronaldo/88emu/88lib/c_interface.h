@@ -90,7 +90,13 @@ enum
 	/* The CM-32LN, the CM-500's LA half and the LAPC-N. */
 	EMU88_DEVICE_CM32LN = 23,
 	/* The MV-30 Studio M's sound section, booted from its system disk. */
-	EMU88_DEVICE_MV30 = 24
+	EMU88_DEVICE_MV30 = 24,
+	/* The SK-88Pro keyboard's sound section, from MIDI. Needs the SC-88Pro 1.02 control ROM too. */
+	EMU88_DEVICE_SK88PRO = 25,
+	/* The SC-880. Its waves are the SC-88Pro's. */
+	EMU88_DEVICE_SC880 = 26,
+	/* The PRO-E arranger, needs the CM-32L's ROMs too. */
+	EMU88_DEVICE_PROE = 27
 	/* Enumerate them in presentation order with emu88_get_device_count() / emu88_get_device_id(). */
 };
 
@@ -139,6 +145,9 @@ EMU88_EXPORT int emu88_get_device_count(void);
 EMU88_EXPORT emu88_device_id emu88_get_device_id(int index);
 /* Display name, or NULL for an unknown id. */
 EMU88_EXPORT const char* emu88_get_device_name(emu88_device_id device);
+/* Short lowercase identifier ("mt322x", "sc88pro"), or NULL for an unknown id. Store or match a
+ * device by this, never by its display name: a key never changes once released, a name may. */
+EMU88_EXPORT const char* emu88_get_device_key(emu88_device_id device);
 /* Number of MIDI inputs the device tells apart; 0 for an unknown id. */
 EMU88_EXPORT int emu88_get_device_midi_port_count(emu88_device_id device);
 /* The lowest MIDI channel the device answers on from power-on, 0-based: 1 on the MT-32 and CM-32L

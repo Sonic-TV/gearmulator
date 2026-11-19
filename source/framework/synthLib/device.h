@@ -133,6 +133,17 @@ namespace synthLib
 		// else it is a no-op.
 		virtual void onTransportDiscontinuity(const SMidiEvent& /*_ev*/) {}
 
+		// The host's tempo and song position, see MidiEventType::HostTransport. A marker as well, it never reaches
+		// sendMidi. The DSP bridge client passes it on to the server
+		virtual void onHostTransport(const SMidiEvent& /*_ev*/) {}
+
+		// A device that plays its arpeggiator in C++ instead of in the firmware, see synthLib::Arpeggiator, says so here.
+		// process() then hands it every block's MIDI before the firmware gets any of it: take the notes to arpeggiate out
+		// of _midi and append what is played to _out. The host's transport arrives in _midi as HostTransport events
+		virtual bool hasArpeggiators() const { return false; }
+		virtual void processArpeggiators(std::vector<SMidiEvent>& /*_midi*/, std::vector<SMidiEvent>& /*_out*/,
+			uint32_t /*_sampleCount*/) {}
+
 		void dummyProcess(uint32_t _numSamples);
 
 		// For firmware that schedules incoming MIDI by sample: makes the offset of an event in the current block an
@@ -143,11 +154,30 @@ namespace synthLib
 		// them into events with source Device, appended to _midiOut, and empties the buffer
 		void parseMidiOutBytes(std::vector<SMidiEvent>& _midiOut);
 
+		// The firmware answers a request later, out of readMidiOut(). A device that hands it one says what answers it:
+		// process() marks those messages as replies to _requester, see SMidiEvent::replyTo. The oldest request takes a
+		// message first, a request that nothing matched for a few seconds of processing is forgotten
+		void expectReply(MidiEventSource _requester, ReplyMatcher _matcher);
+
 		std::vector<uint8_t> m_midiOutBytes;
+
+	private:
+		const std::vector<SMidiEvent>& arpeggiate(const std::vector<SMidiEvent>& _midiIn, size_t _size);
+		void markExpectedReplies(std::vector<SMidiEvent>& _midiOut, size_t _size);
+		uint32_t getReplyTimeoutSamples() const;
+
+		struct ExpectedReply
+		{
+			MidiEventSource requester;
+			ReplyMatcher matcher;
+			uint32_t samplesLeft;
+		};
 
 	private:
 		DeviceCreateParams m_createParams;
 		std::vector<SMidiEvent> m_midiIn;
+		std::vector<SMidiEvent> m_arpMidi;
+		std::vector<SMidiEvent> m_arpOut;
 
 		uint32_t m_extraLatency = 0;
 		uint32_t m_numSamplesProcessed = 0;
@@ -156,6 +186,8 @@ namespace synthLib
 
 		MidiTranslator m_midiTranslator;
 		std::vector<SMidiEvent> m_translatorOut;
+
+		std::vector<ExpectedReply> m_expectedReplies;
 
 		std::vector<SMidiEvent> m_bridgeMidiOut;
 		std::vector<uint8_t> m_bridgeState;

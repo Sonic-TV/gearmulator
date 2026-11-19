@@ -166,14 +166,19 @@ namespace emu88Player
 		const auto inventory = emu88Lib::RomLoader::rescan();
 		const auto missing = romFolderAccessError(standaloneLaunch ? *standaloneLaunch : LaunchOptions{}).empty()
 			? " (ROMs missing)" : " (ROM folder not readable)";
+		const auto isAvailable = [&inventory](const emu88Lib::DeviceModel _model)
+		{
+			return inventory.isComplete(emu88Lib::RomLoader::toRomDevice(_model));
+		};
+		// Without a single complete board there is nothing to choose from, so every device
+		// stays listed to show what ROMs could be added.
+		const auto hideUnavailable = m_processor.config().getBoolValue("hideDevicesWithoutRoms", false) &&
+			std::any_of(emu88Lib::g_deviceMenuOrder.begin(), emu88Lib::g_deviceMenuOrder.end(), isAvailable);
 		for(const auto model : emu88Lib::g_deviceMenuOrder)
 		{
-			// A hidden device stays in the menu only while it is the one running.
-			if(!emu88Lib::isDeviceListed(model) && model != m_processor.deviceModel())
-				continue;
-			const auto available = inventory.isComplete(emu88Lib::RomLoader::toRomDevice(model));
-			// The GM modules are offered only once their ROMs are there.
-			if(emu88Lib::isGmModuleModel(model) && !available && model != m_processor.deviceModel())
+			const auto available = isAvailable(model);
+			// The running device stays listed, whatever its ROMs.
+			if(hideUnavailable && !available && model != m_processor.deviceModel())
 				continue;
 			const auto label = std::string(emu88Lib::getDeviceProfile(model).displayName) +
 				(available ? "" : missing);
@@ -258,7 +263,9 @@ namespace emu88Player
 		{
 		case emu88Lib::DeviceModel::Sc88: panel = "sc88_panel.png"; break;
 		case emu88Lib::DeviceModel::Sc88VL: panel = "sc88vl_panel.png"; break;
-		case emu88Lib::DeviceModel::Sc88Pro: panel = "sc88pro_panel.png"; break;
+		// No SK-88Pro artwork: it shows the SC-88Pro's, the faces both have at its own switches.
+		case emu88Lib::DeviceModel::Sc88Pro:
+		case emu88Lib::DeviceModel::Sk88Pro: panel = "sc88pro_panel.png"; break;
 		case emu88Lib::DeviceModel::Sc8850: panel = "sc8850_panel.png"; break;
 		case emu88Lib::DeviceModel::Sc55Mk2:
 		case emu88Lib::DeviceModel::Sc155Mk2: panel = "sc55mk2_panel.png"; break;
@@ -274,11 +281,14 @@ namespace emu88Player
 		case emu88Lib::DeviceModel::Mt32New: panel = "mt32_panel.png"; break;
 		case emu88Lib::DeviceModel::Cm64: panel = "cm64_panel.png"; break;
 		case emu88Lib::DeviceModel::Sc8820: panel = "sc8820_panel.png"; break;
+		case emu88Lib::DeviceModel::Sc880: panel = "sc880_panel.png"; break;
 		case emu88Lib::DeviceModel::Xpgs:
 		case emu88Lib::DeviceModel::VeGsPro:
 		case emu88Lib::DeviceModel::Nu10b:
 		case emu88Lib::DeviceModel::Miig5: panel = "sc88exp_panel.png"; break;
 		case emu88Lib::DeviceModel::Mv30: panel = "mv30_panel.png"; break;
+		// The CM bezel with its lamps and name taken off, see modelProE in the stylesheet.
+		case emu88Lib::DeviceModel::ProE: panel = "proe_panel.png"; break;
 		case emu88Lib::DeviceModel::Sc55St:
 		case emu88Lib::DeviceModel::Cm300:
 		case emu88Lib::DeviceModel::Scc1a:
@@ -294,7 +304,7 @@ namespace emu88Player
 		const bool cmBezel = emu88Lib::isCmModel(_model) || emu88Lib::isLaModel(_model);
 		const bool mt32 = _model == emu88Lib::DeviceModel::Mt32Old || _model == emu88Lib::DeviceModel::Mt32New;
 		const bool darkTransport = (cmBezel && !mt32) || _model == emu88Lib::DeviceModel::Sc8850 ||
-		                           _model == emu88Lib::DeviceModel::Sc8820;
+		                           _model == emu88Lib::DeviceModel::Sc8820 || _model == emu88Lib::DeviceModel::ProE;
 		for(const auto& [id, name] : {std::pair{"playerPlayGraphic", "player_play"}, std::pair{"playerPauseGraphic", "player_pause"},
 		                              std::pair{"playerStopGraphic", "player_stop"}})
 			if(auto* graphic = document->GetElementById(id))
@@ -305,6 +315,7 @@ namespace emu88Player
 			root->SetClass("modelSc88VL", _model == emu88Lib::DeviceModel::Sc88VL);
 			root->SetClass("modelSc88Pro", _model == emu88Lib::DeviceModel::Sc88Pro);
 			root->SetClass("modelSc8850", _model == emu88Lib::DeviceModel::Sc8850);
+			root->SetClass("modelSc880", _model == emu88Lib::DeviceModel::Sc880);
 			root->SetClass("modelSc55", emu88Lib::isSc55Model(_model) && !noPanel);
 			root->SetClass("modelCm", cmBezel);
 			// The CM bezels differ in their windows: one 16x2 on the CM-32P, one 20x1 on the
@@ -315,11 +326,13 @@ namespace emu88Player
 			root->SetClass("modelMt32", mt32);
 			root->SetClass("modelSc8820", _model == emu88Lib::DeviceModel::Sc8820);
 			root->SetClass("modelMv30", _model == emu88Lib::DeviceModel::Mv30);
+			root->SetClass("modelProE", _model == emu88Lib::DeviceModel::ProE);
 			root->SetClass("modelNoPanel", noPanel);
 			root->SetClass("modelNoDisplay", !emu88Lib::deviceHasLcd(_model));
 		}
 		if(auto* mapOrEq = document->GetElementById("btSc88Map"))
-			mapOrEq->SetAttribute("title", _model == emu88Lib::DeviceModel::Sc88Pro ? "SC-88 MAP (2)" : "EQ (2)");
+			mapOrEq->SetAttribute("title", _model == emu88Lib::DeviceModel::Sc88Pro ||
+			                               _model == emu88Lib::DeviceModel::Sk88Pro ? "SC-88 MAP (2)" : "EQ (2)");
 		refreshButtonElements(_model);
 		// Drop the previous model's lit LEDs before the element list moves on.
 		updateLeds(0);

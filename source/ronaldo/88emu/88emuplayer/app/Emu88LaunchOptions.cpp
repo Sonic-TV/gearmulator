@@ -134,7 +134,7 @@ namespace emu88Player
                                               "sc55st", "cm300",  "scb55",   "rlp3237", "sc155",   "sc155mk2",
                                               "xpgs",   "sc8820", "cm32p",   "vegspro", "scc1a",   "cm64",
                                               "cm32l",  "nu10b",  "miig5",   "mt32old", "mt32new", "cm32ln",
-                                              "mv30"};
+                                              "mv30",   "sk88pro", "sc880",  "proe"};
         static_assert(std::size(ids) == emu88Lib::g_deviceMenuOrder.size(), "one ID per device model, in enum order");
         return ids[static_cast<size_t>(model)];
     }
@@ -205,6 +205,19 @@ namespace emu88Player
         if (!emu88Lib::HardwareDevice::isPcmCardImage(card))
             throw std::runtime_error("Not a PCM card image (up to 512 KiB, with a tone list): " +
                                      file.getFullPathName().toStdString());
+        return card;
+    }
+
+    std::vector<uint8_t> loadStyleCard(const juce::File& file)
+    {
+        juce::MemoryBlock data;
+        if (!file.existsAsFile() || !file.loadFileAsData(data))
+            throw std::runtime_error("Style card not found: " + file.getFullPathName().toStdString());
+        const auto* bytes = static_cast<const uint8_t*>(data.getData());
+        std::vector<uint8_t> card(bytes, bytes + data.getSize());
+        if (!emu88Lib::HardwareDevice::isStyleCardImage(card))
+            throw std::runtime_error("Not a PRO-E or E-20 style card image (32 or 64 KiB, starting with "
+                                     "\"Roland PROE\" or \"Roland E-20\"): " + file.getFullPathName().toStdString());
         return card;
     }
 
@@ -404,8 +417,7 @@ namespace emu88Player
         if (const auto error = romFolderAccessError(options); !error.empty())
             std::cerr << error << '\n';
         for (const auto model : emu88Lib::g_deviceMenuOrder)
-            if (emu88Lib::isDeviceListed(model))
-                std::cout << deviceId(model) << "\t" << emu88Lib::getDeviceProfile(model).displayName << "\t"
-                          << (emu88Lib::RomLoader::isDeviceAvailable(model) ? "available" : "missing ROMs") << '\n';
+            std::cout << deviceId(model) << "\t" << emu88Lib::getDeviceProfile(model).displayName << "\t"
+                      << (emu88Lib::RomLoader::isDeviceAvailable(model) ? "available" : "missing ROMs") << '\n';
     }
 } // namespace emu88Player

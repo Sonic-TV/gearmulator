@@ -8,6 +8,14 @@
 
 #include "parameterregion.h"
 
+#include "baseLib/event.h"
+
+namespace baseLib
+{
+	class BinaryStream;
+	class ChunkReader;
+}
+
 namespace pluginLib
 {
 	class Parameter;
@@ -17,6 +25,9 @@ namespace pluginLib
 	{
 	public:
 		explicit ParameterLocking(Controller& _controller);
+
+		// part, region id, locked. On the thread that locks or unlocks, the message thread so far
+		baseLib::Event<uint8_t, std::string, bool> evRegionLockChanged;
 
 		bool lockRegion(uint8_t _part, const std::string& _id);
 		bool unlockRegion(uint8_t _part, const std::string& _id);
@@ -28,6 +39,9 @@ namespace pluginLib
 
 		// safe to call from any thread, for example the audio thread
 		bool hasLockedRegions(const uint8_t _part) const { return _part < m_lockedRegionCounts.size() && m_lockedRegionCounts[_part] > 0; }
+
+		void saveChunkData(baseLib::BinaryStream& _s) const;
+		void loadChunkData(baseLib::ChunkReader& _cr);
 
 	private:
 		void setParametersLocked(const ParameterRegion& _parameterRegion, uint8_t _part, bool _locked) const;

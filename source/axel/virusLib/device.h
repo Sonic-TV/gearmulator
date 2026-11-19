@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arpeggiator.h"
 #include "dspSingle.h"
 #include "frontpanelState.h"
 #include "synthLib/midiTypes.h"
@@ -34,6 +35,7 @@ namespace virusLib
 		void process(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs, size_t _size, const std::vector<synthLib::SMidiEvent>& _midiIn, std::vector<synthLib::SMidiEvent>& _midiOut) override;
 
 		bool getState(std::vector<uint8_t>& _state, synthLib::StateType _type) override;
+		bool getStateWithPendingMidi(std::vector<uint8_t>& _state, synthLib::StateType _type, const std::vector<synthLib::SMidiEvent>& _pendingMidi) override;
 		bool setState(const std::vector<uint8_t>& _state, synthLib::StateType _type) override;
 		bool setStateFromUnknownCustomData(const std::vector<uint8_t>& _state) override;
 		static bool find4CC(uint32_t& _offset, const synthLib::SysexBuffer& _data, const std::string_view& _4cc);
@@ -59,7 +61,13 @@ namespace virusLib
 		static void applyDspMemoryPatches(const DspSingle* _dspA, const DspSingle* _dspB, const ROMFile& _rom);
 		void applyDspMemoryPatches() const;
 
+		// With the patterns of the firmware that runs, see virusArpTest
+		const Arpeggiator& getArpeggiator() const { return m_arpeggiator; }
+
 	private:
+		bool hasArpeggiators() const override;
+		void processArpeggiators(std::vector<synthLib::SMidiEvent>& _midi, std::vector<synthLib::SMidiEvent>& _out,
+			uint32_t _sampleCount) override;
 		bool sendMidi(const synthLib::SMidiEvent& _ev, std::vector<synthLib::SMidiEvent>& _response) override;
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut) override;
 		void processAudio(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs, size_t _samples) override;
@@ -79,5 +87,8 @@ namespace virusLib
 		std::atomic<uint32_t> m_dspClockPercent;	// the clock itself changes later, on the DSP thread
 		FrontpanelState m_frontpanelStateDSP;
 		synthLib::SMidiEvent m_frontpanelStateMidiEvent;
+
+		Arpeggiator m_arpeggiator;
+		bool m_cppArpeggiator = false;
 	};
 }

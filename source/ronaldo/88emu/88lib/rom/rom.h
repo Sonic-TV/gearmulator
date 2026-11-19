@@ -59,6 +59,26 @@ namespace emu88Lib
         }
     };
 
+    // The PRO-E's images: the HC11's program ROM and the four pattern ROMs of its banked
+    // window, in bank order (IC6, IC7, IC17, IC18).
+    struct ProERomSet
+    {
+        static constexpr size_t ProgramSize = 0x4000;
+        static constexpr size_t PatternSize = 0x10000;
+        using PatternRoms = std::array<std::vector<uint8_t>, 4>;
+        std::vector<uint8_t> program;
+        PatternRoms patterns;
+        bool isValid() const
+        {
+            if (program.size() != ProgramSize)
+                return false;
+            for (const auto& pattern : patterns)
+                if (pattern.size() != PatternSize)
+                    return false;
+            return true;
+        }
+    };
+
     // The images of one of Roland's LA boards: the 8095's control ROM, the LA32's PCM mask
     // ROMs and the Boss reverb gate array's microcode ROM. Which board they belong to sets
     // their sizes: the CM-32L's wave image is the two 512 KiB mask ROMs concatenated in
@@ -100,6 +120,9 @@ namespace emu88Lib
     struct Sc88ProRomSet
     {
         static constexpr size_t FirmwareSize = 0x100000;
+        // The SK-88Pro's firmware as the CPU sees it, see buildSk88ProImage().
+        static constexpr size_t Sk88ProFirmwareSize = 0x200000;
+        static constexpr size_t Sc880FirmwareSize = 0x200000;
         static constexpr size_t WaveASize = 0x800000;
         static constexpr size_t WaveBSize = 0x800000;
         static constexpr size_t WaveCSize = 0x400000;
@@ -113,7 +136,9 @@ namespace emu88Lib
 
         bool isValid() const
         {
-            return firmware.size() == FirmwareSize && waveA.size() == WaveASize && waveB.size() == WaveBSize &&
+            return (firmware.size() == FirmwareSize || firmware.size() == Sk88ProFirmwareSize ||
+                    firmware.size() == Sc880FirmwareSize) &&
+                waveA.size() == WaveASize && waveB.size() == WaveBSize &&
                 waveC.size() == WaveCSize;
         }
     };
@@ -133,6 +158,14 @@ namespace emu88Lib
             return cpu.size() == CpuSize && program.size() == ProgramSize && data.size() == DataSize;
         }
     };
+
+    // The SK-88Pro's first 2 MiB of CPU space, from its 512 KiB program EPROM and an SC-88Pro
+    // control ROM in CPU order. The EPROM's low 128 KiB is the vector table and the code at
+    // 000000; the board's parameter mask ROM follows at 020000-0FFFFF, where the SC-88Pro ROM
+    // has the same tone data; the whole EPROM appears again at 100000, which is where the
+    // firmware runs its code bank and reads the keyboard's tables. Empty when a size is wrong.
+    std::vector<uint8_t> buildSk88ProImage(const std::vector<uint8_t>& _program,
+                                           const std::vector<uint8_t>& _sc88ProControl);
 
     // SC-8820 waves can supply the exact SC-88Pro set. For SC-8850 they were
     // only a bring-up source; that model requires its native pair below.

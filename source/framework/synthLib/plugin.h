@@ -87,7 +87,7 @@ namespace synthLib
 		bool applyPendingDeviceSamplerate();
 
 	private:
-		void processMidiClock(float _bpm, float _ppqPos, bool _isPlaying, size_t _sampleCount);
+		void processMidiClock(float _bpm, double _ppqPos, bool _isPlaying, size_t _sampleCount);
 		float* getDummyBuffer(size_t _minimumSize);
 		const float* getSilence(size_t _minimumSize);
 		void updateDeviceLatency();
@@ -128,8 +128,9 @@ namespace synthLib
 
 		uint32_t m_blockSize = 0;
 
-		uint32_t m_deviceLatencyMidiToOutput = 0;
-		uint32_t m_deviceLatencyInputToOutput = 0;
+		// In host samples, unrounded: updateLatencies() rounds the sum once
+		float m_deviceLatencyMidiToOutput = 0.0f;
+		float m_deviceLatencyInputToOutput = 0.0f;
 
 		std::atomic<uint32_t> m_latencyMidiToOutput{0};
 		std::atomic<uint32_t> m_latencyInputToOutput{0};

@@ -36,11 +36,14 @@ namespace emu88Lib
 		Mt32New,
 		Cm32ln,
 		Mv30,
+		Sk88Pro,
+		Sc880,
+		ProE,
 	};
 
 	// Curated presentation order. Enum values remain
 	// stable because they are persisted in plugin settings and project state.
-	inline constexpr std::array<DeviceModel, 25> g_deviceMenuOrder = {
+	inline constexpr std::array<DeviceModel, 28> g_deviceMenuOrder = {
 		DeviceModel::Mt32Old,
 		DeviceModel::Mt32New,
 		DeviceModel::Cm32l,
@@ -48,6 +51,7 @@ namespace emu88Lib
 		DeviceModel::Cm32p,
 		DeviceModel::Cm64,
 		DeviceModel::Mv30,
+		DeviceModel::ProE,
 		DeviceModel::Sc55Mk1,
 		DeviceModel::Sc55Mk2,
 		DeviceModel::Sc55St,
@@ -61,7 +65,9 @@ namespace emu88Lib
 		DeviceModel::Sc88VL,
 		DeviceModel::Xpgs,
 		DeviceModel::Sc88Pro,
+		DeviceModel::Sk88Pro,
 		DeviceModel::VeGsPro,
+		DeviceModel::Sc880,
 		DeviceModel::Sc8820,
 		DeviceModel::Sc8850,
 		DeviceModel::Nu10b,
@@ -71,6 +77,10 @@ namespace emu88Lib
 	struct DeviceProfile
 	{
 		const char* displayName;
+		// Lowercase identifier that hosts store or match a device by: CLAP plugin ids
+		// (88emuClapHeadless), emulator config files. Unlike the display name it never
+		// changes once released, and a new device gets a new one.
+		const char* key;
 		uint8_t groupCount;
 	};
 
@@ -205,6 +215,12 @@ namespace emu88Lib
 		return _model == DeviceModel::Cm32p || _model == DeviceModel::Cm64 || _model == DeviceModel::Mv30;
 	}
 
+	// The boards with a slot for a style card: the PRO-E, which takes its own and the E-20's (TN-SC1 series).
+	constexpr bool hasStyleCardSlot(const DeviceModel _model)
+	{
+		return _model == DeviceModel::ProE;
+	}
+
 	// Modules that run in their GM mode and nothing else: construction sets them up, and they
 	// have no panel or display here.
 	constexpr bool isGmModuleModel(const DeviceModel _model)
@@ -220,14 +236,6 @@ namespace emu88Lib
 	{
 		return model != DeviceModel::Xpgs && model != DeviceModel::VeGsPro && model != DeviceModel::Sc8820 &&
 		       !isGmModuleModel(model) && (!isSc55Model(model) || getSc55DeviceProfile(model).panel != Sc55Panel::None);
-	}
-
-	// Whether a model appears in the device menu and the CLI's device list. Every board is
-	// listed now that the SC-55st, RLP-3237 and CM-300/SCC-1 images are catalogued; the
-	// hook stays for the next board whose dump is still out.
-	constexpr bool isDeviceListed(const DeviceModel)
-	{
-		return true;
 	}
 
 	// The CM-64 carries two service displays, one per board: the CM-32P's 16x2 above the

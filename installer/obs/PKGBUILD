@@ -13,7 +13,7 @@ pkgname=(
   theusualsuspects-je8086
   theusualsuspects-88emu
 )
-pkgver=2.2.25
+pkgver=2.2.27
 pkgrel=1
 pkgdesc='Emulations of classic virtual analog synthesizers'
 arch=('x86_64' 'aarch64')
@@ -22,7 +22,8 @@ license=('GPL-3.0-or-later')
 # pacman detects no dependencies, and JUCE loads the X11 libraries at run time: list them all.
 depends=('alsa-lib' 'libglvnd' 'libx11' 'libxext' 'libxinerama' 'libxrandr' 'libxcursor')
 # freetype2 and fontconfig: JUCE builds juceaide as a host tool that needs the system headers.
-makedepends=('cmake' 'ninja' 'freetype2' 'fontconfig' 'libxcomposite')
+# jack2: the JACK headers for the standalones, JUCE loads libjack at run time (pipewire-jack or jack2).
+makedepends=('cmake' 'ninja' 'freetype2' 'fontconfig' 'libxcomposite' 'jack2')
 options=('!debug')
 source=("TheUsualSuspects-$pkgver.tar.xz")
 sha256sums=('SKIP')
@@ -42,6 +43,7 @@ build() {
     -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=ON
     -Dgearmulator_BUILD_JUCEPLUGIN_LV2=ON
     -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON
+    -Dgearmulator_BUILD_INSTALLER=OFF
   )
   cmake -S "$_src" -B build -G Ninja "${_cmake_args[@]}"
   cmake --build build
