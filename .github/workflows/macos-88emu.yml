@@ -1,0 +1,35 @@
+name: macOS 88emu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/88emu-20261119]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure 88emu
+        run: >-
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -Dgearmulator_SYNTH_OSIRUS=OFF -Dgearmulator_SYNTH_OSTIRUS=OFF
+          -Dgearmulator_SYNTH_VAVRA=OFF -Dgearmulator_SYNTH_XENIA=OFF
+          -Dgearmulator_SYNTH_NODALRED2X=OFF -Dgearmulator_SYNTH_JE8086=OFF
+          -Dgearmulator_SYNTH_88EMU=ON -Dgearmulator_COMPONENT_DSPBRIDGE=OFF
+          -Dgearmulator_BUILD_INSTALLER=OFF -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON
+          -Dgearmulator_BUILD_JUCEPLUGIN_AU=ON -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON
+          -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=ON -DBUILD_TESTING=OFF
+      - name: Build 88emu
+        run: cmake --build build --config Release --target 88emuplayer_All 88EmuCli --parallel 3
+      - name: Package 88emu
+        working-directory: build
+        run: cpack -C Release -G ZIP -D 'CPACK_COMPONENTS_ALL=88emuPlayer-AU;88emuPlayer-VST3;88emuPlayer-CLAP;88emuPlayer-Standalone'
+      - name: Upload 88emu packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-88emuPlayer
+          path: build/TheUsualSuspects-88emuPlayer-*.zip
+          if-no-files-found: error
